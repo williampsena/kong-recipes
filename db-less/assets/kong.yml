@@ -1,0 +1,30 @@
+
+_format_version: "3.0"
+
+services:
+- name: my-service
+  url: https://labs.bible.org/api
+  plugins:
+  - name: key-auth
+  routes:
+  - name: my-route
+    paths:
+    - /
+
+consumers:
+- username: my-user
+  keyauth_credentials:
+  - key: my-key
+
+
+plugins:
+- name: file-log
+  config:
+    path: /tmp/api.log
+
+- name: request-transformer
+  config:
+    add:
+      headers:
+        - content-type:application/json
+        - accept:application/json

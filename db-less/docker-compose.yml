@@ -1,0 +1,17 @@
+version: '3.9'
+
+services:
+  kong:
+    image: kong:3.0-alpine
+    environment:
+      KONG_LOG_LEVEL: info
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yml
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    restart: unless-stopped
+    volumes:
+      - ./assets/kong.yml:/usr/local/kong/declarative/kong.yml:ro
