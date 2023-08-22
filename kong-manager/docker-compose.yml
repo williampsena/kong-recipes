@@ -1,0 +1,73 @@
+version: "3.8"
+
+name: kong-manager
+
+services:
+  kong-database:
+    image: postgres:15
+    restart: always
+    networks:
+      - kong-manager
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: kong
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  kong-migration:
+    image: kong:3.4
+    command: "kong migrations bootstrap"
+    networks:
+      - kong-manager
+    restart: on-failure
+    environment:
+      KONG_PG_HOST: kong-database
+      KONG_PG_PASSWORD: kong
+    links:
+      - kong-database
+    depends_on:
+      - kong-database
+
+  kong:
+    image: kong:3.4
+    restart: always
+    networks:
+      - kong-manager
+    environment:
+      KONG_LOG_LEVEL: info
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_PG_HOST: kong-database
+      KONG_PG_PASSWORD: kong
+      KONG_STATUS_LISTEN: 0.0.0.0:8100
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_PROXY_LISTEN_SSL: 0.0.0.0:8443
+      KONG_LISTEN_SSL: 0.0.0.0:8443
+      KONG_ADMIN_GUI_PATH: /manager
+      KONG_ADMIN_GUI_URL: http://localhost:8002/manager
+    depends_on:
+      - kong-database
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://kong:8001"]
+      interval: 5s
+      timeout: 2s
+      retries: 15
+    ports:
+      - 8000:8000
+      - 8001:8001
+      - 8002:8002
+
+volumes:
+  postgresql-data:
+
+networks:
+ kong-manager:
