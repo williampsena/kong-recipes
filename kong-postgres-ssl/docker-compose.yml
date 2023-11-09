@@ -1,43 +1,46 @@
 version: '3.9'
 
 
+x-kong-envs: &kong_envs
+  KONG_ADMIN_ACCESS_LOG: /dev/stdout
+  KONG_ADMIN_ERROR_LOG: /dev/stderr
+  KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+  KONG_ANONYMOUS_REPORTS: off
+  KONG_CLIENT_BODY_BUFFER_SIZE: 15m
+  KONG_DATABASE: postgres
+  KONG_LOG_LEVEL: debug
+  KONG_PG_TIMEOUT: 5000
+  KONG_PG_USER: postgres
+  KONG_PG_PASSWORD: secret
+  KONG_PG_DATABASE: postgres
+  KONG_PREPARE: on
+  KONG_PROXY_ACCESS_LOG: /dev/stdout
+  KONG_PROXY_ERROR_LOG: /dev/stderr
+  KONG_PROXY_STREAM_ACCESS_LOG: /dev/stdout
+  KONG_PROXY_STREAM_ERROR_LOG: /dev/stderr
+
+x-kong-envs-ssl: &kong_envs_ssl
+  <<: *kong_envs
+  KONG_PG_HOST: postgres
+  KONG_PG_PORT: 5432  
+  KONG_PG_SSL: on
+  KONG_PG_SSL_REQUIRED: on
+  KONG_PG_SSL_VERIFY: on   
+  KONG_PG_SSL_CERT: /usr/local/share/ca-certificates/client.crt
+  KONG_PG_SSL_CERT_KEY: /usr/local/share/ca-certificates/client.key
+  KONG_LUA_SSL_TRUSTED_CERTIFICATE: system,/usr/local/share/ca-certificates/server.crt
+  KONG_LUA_SSL_VERIFY_DEPTH: 1
+
 x-kong-defaults: &kong_defaults 
   build:
     dockerfile: kong.Dockerfile
   networks:
-    - kong-postgres
-  environment:
-    KONG_ADMIN_ACCESS_LOG: /dev/stdout
-    KONG_ADMIN_ERROR_LOG: /dev/stderr
-    KONG_ADMIN_LISTEN: "0.0.0.0:8001"
-    KONG_ANONYMOUS_REPORTS: off
-    KONG_CLIENT_BODY_BUFFER_SIZE: 15m
-    KONG_DATABASE: postgres
-    KONG_LOG_LEVEL: debug
-    KONG_PG_HOST: postgres
-    KONG_PG_PORT: 5432
-    KONG_PG_TIMEOUT: 5000
-    KONG_PG_USER: postgres
-    KONG_PG_PASSWORD: secret
-    KONG_PG_DATABASE: postgres
-    KONG_PREPARE: on
-    KONG_PROXY_ACCESS_LOG: /dev/stdout
-    KONG_PROXY_ERROR_LOG: /dev/stderr
-    KONG_PROXY_STREAM_ACCESS_LOG: /dev/stdout
-    KONG_PROXY_STREAM_ERROR_LOG: /dev/stderr
-    KONG_PG_SSL: on
-    KONG_PG_SSL_REQUIRED: on
-    KONG_PG_SSL_VERIFY: on
-    KONG_PG_SSL_CERT: /usr/local/share/ca-certificates/client.crt
-    KONG_PG_SSL_CERT_KEY: /usr/local/share/ca-certificates/client.key
-    KONG_LUA_SSL_TRUSTED_CERTIFICATE: system,/usr/local/share/ca-certificates/server.crt
-    KONG_LUA_SSL_VERIFY_DEPTH: 1 
+    - kong-postgres 
   healthcheck:
     test: ["CMD", "curl", "-f", "http://kong:8001"]
     interval: 5s
     timeout: 2s
     retries: 15
-  
 
 services:
   postgres:
@@ -62,8 +65,20 @@ services:
         timeout: 5s
         retries: 5
 
+  postgres-proxy:
+    build:
+      dockerfile: nginx.Dockerfile
+    networks:
+      - kong-postgres
+    ports:
+      - 5431:5431
+    depends_on:
+      - postgres
+
   kong-migrations:
     <<: *kong_defaults
+    environment:
+      <<: *kong_envs_ssl
     command: >
       sh -c "kong migrations bootstrap --db-timeout 300 --vv &&
              kong migrations up &&
@@ -73,12 +88,29 @@ services:
 
   kong:
     <<: *kong_defaults
+    environment:
+      <<: *kong_envs_ssl
     depends_on:
       - postgres
+      - postgres-proxy
       - kong-migrations
     ports:
       - 8000:8000
       - 8001:8001
+
+  kong-pg-proxy:
+    <<: *kong_defaults
+    environment:
+      <<: *kong_envs
+      KONG_PG_HOST: postgres-proxy
+      KONG_PG_PORT: 5431
+    depends_on:
+      - postgres
+      - postgres-proxy
+      - kong-migrations
+    ports:
+      - 8100:8000
+      - 8101:8001
 networks:
   kong-postgres:
     name: kong-postgres

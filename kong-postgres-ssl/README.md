@@ -30,5 +30,7 @@ docker compose logs kong -f
 If you encounter any problems during Kong Startup, please restart the container; migrations may not have been completed when Kong was launched.
 
 ```shell
-docker compose restart kong
+docker compose restart kong 
 ```
+
+> When your SSL connection is unsuccessful, you can use Nginx as a proxy, check port Kong at ports (8100 and 8101), which uses Postgres proxy at port 5431.
