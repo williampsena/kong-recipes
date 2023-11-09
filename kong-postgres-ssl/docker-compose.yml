@@ -1,0 +1,87 @@
+version: '3.9'
+
+
+x-kong-defaults: &kong_defaults 
+  build:
+    dockerfile: kong.Dockerfile
+  networks:
+    - kong-postgres
+  environment:
+    KONG_ADMIN_ACCESS_LOG: /dev/stdout
+    KONG_ADMIN_ERROR_LOG: /dev/stderr
+    KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+    KONG_ANONYMOUS_REPORTS: off
+    KONG_CLIENT_BODY_BUFFER_SIZE: 15m
+    KONG_DATABASE: postgres
+    KONG_LOG_LEVEL: debug
+    KONG_PG_HOST: postgres
+    KONG_PG_PORT: 5432
+    KONG_PG_TIMEOUT: 5000
+    KONG_PG_USER: postgres
+    KONG_PG_PASSWORD: secret
+    KONG_PG_DATABASE: postgres
+    KONG_PREPARE: on
+    KONG_PROXY_ACCESS_LOG: /dev/stdout
+    KONG_PROXY_ERROR_LOG: /dev/stderr
+    KONG_PROXY_STREAM_ACCESS_LOG: /dev/stdout
+    KONG_PROXY_STREAM_ERROR_LOG: /dev/stderr
+    KONG_PG_SSL: on
+    KONG_PG_SSL_REQUIRED: on
+    KONG_PG_SSL_VERIFY: on
+    KONG_PG_SSL_CERT: /usr/local/share/ca-certificates/client.crt
+    KONG_PG_SSL_CERT_KEY: /usr/local/share/ca-certificates/client.key
+    KONG_LUA_SSL_TRUSTED_CERTIFICATE: system,/usr/local/share/ca-certificates/server.crt
+    KONG_LUA_SSL_VERIFY_DEPTH: 1 
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://kong:8001"]
+    interval: 5s
+    timeout: 2s
+    retries: 15
+  
+
+services:
+  postgres:
+    build:
+      dockerfile: pgsql.Dockerfile
+    command: > 
+      -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/server.crt
+      -c ssl_key_file=/var/lib/postgresql/server.key
+    networks:
+      - kong-postgres
+    environment:
+      POSTGRES_PASSWORD: secret
+      PGDATA: "/var/lib/postgresql/data/pgdata"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    healthcheck:
+        test: ["cmd", "pg_isready", "-u", "kong"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+
+  kong-migrations:
+    <<: *kong_defaults
+    command: >
+      sh -c "kong migrations bootstrap --db-timeout 300 --vv &&
+             kong migrations up &&
+             kong migrations finish"
+    depends_on:
+      - postgres
+
+  kong:
+    <<: *kong_defaults
+    depends_on:
+      - postgres
+      - kong-migrations
+    ports:
+      - 8000:8000
+      - 8001:8001
+networks:
+  kong-postgres:
+    name: kong-postgres
+
+volumes:
+  pg-data:
