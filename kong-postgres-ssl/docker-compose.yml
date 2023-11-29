@@ -82,7 +82,7 @@ services:
     networks:
       - kong-postgres
     ports:
-      - 5433:5433
+      - 5433:5432
     depends_on:
       - postgres
 
