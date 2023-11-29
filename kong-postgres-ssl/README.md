@@ -25,6 +25,15 @@ docker compose up -d kong
 docker compose logs kong -f
 ```
 
+# Testing
+
+The Kong API Gateway is accessible through a variety of methods:
+
+    - http://localhost:8001, with lua and Kong protected by SSL
+    - http://localhost:8101, which uses a new container to serve as a proxy because it uses nginx as a proxy instead of Kong Lua to handle SSL.
+    - http://localhost:8201, which uses the haproxy as a proxy with ssl;
+    - http://localhost:8301, which uses the Kong Nginx Stream custom settings as proxy without utilizing Kong Lua to deal with SSL.
+
 # Troubleshooting
 
 If you encounter any problems during Kong Startup, please restart the container; migrations may not have been completed when Kong was launched.

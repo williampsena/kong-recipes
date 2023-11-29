@@ -20,9 +20,7 @@ x-kong-envs: &kong_envs
   KONG_PROXY_STREAM_ERROR_LOG: /dev/stderr
 
 x-kong-envs-ssl: &kong_envs_ssl
-  <<: *kong_envs
-  KONG_PG_HOST: postgres
-  KONG_PG_PORT: 5432  
+  <<: *kong_envs  
   KONG_PG_SSL: on
   KONG_PG_SSL_REQUIRED: on
   KONG_PG_SSL_VERIFY: on   
@@ -34,8 +32,11 @@ x-kong-envs-ssl: &kong_envs_ssl
 x-kong-defaults: &kong_defaults 
   build:
     dockerfile: kong.Dockerfile
+    args:
+      PG_EXTERNAL_HOST: postgres
+      PG_EXTERNAL_PORT: 5432
   networks:
-    - kong-postgres 
+    - kong-postgres
   healthcheck:
     test: ["CMD", "curl", "-f", "http://kong:8001"]
     interval: 5s
@@ -65,7 +66,7 @@ services:
         timeout: 5s
         retries: 5
 
-  postgres-proxy:
+  nginx-postgres-proxy:
     build:
       dockerfile: nginx.Dockerfile
     networks:
@@ -75,10 +76,22 @@ services:
     depends_on:
       - postgres
 
+  haproxy-pg-proxy:
+    build:
+      dockerfile: haproxy.Dockerfile
+    networks:
+      - kong-postgres
+    ports:
+      - 5433:5433
+    depends_on:
+      - postgres
+
   kong-migrations:
     <<: *kong_defaults
     environment:
       <<: *kong_envs_ssl
+      KONG_PG_HOST: postgres
+      KONG_PG_PORT: 5432
     command: >
       sh -c "kong migrations bootstrap --db-timeout 300 --vv &&
              kong migrations up &&
@@ -90,27 +103,59 @@ services:
     <<: *kong_defaults
     environment:
       <<: *kong_envs_ssl
+      KONG_PG_HOST: postgres
+      KONG_PG_PORT: 5432
     depends_on:
       - postgres
-      - postgres-proxy
       - kong-migrations
     ports:
       - 8000:8000
       - 8001:8001
+      - 8003:8003
 
-  kong-pg-proxy:
+  kong-nginx-pg-proxy:
     <<: *kong_defaults
     environment:
       <<: *kong_envs
-      KONG_PG_HOST: postgres-proxy
+      KONG_PG_HOST: nginx-postgres-proxy
       KONG_PG_PORT: 5431
     depends_on:
       - postgres
-      - postgres-proxy
+      - nginx-postgres-proxy
       - kong-migrations
     ports:
       - 8100:8000
       - 8101:8001
+
+  kong-local-pg-proxy:
+    <<: *kong_defaults
+    environment:
+      <<: *kong_envs
+      POSTGRES_STREAM_PROXY: on
+      KONG_PG_HOST: postgres
+      KONG_PG_PORT: 5432
+    depends_on:
+      - postgres
+      - kong-migrations
+    ports:
+      - 8200:8000
+      - 8201:8001
+
+  kong-haproxy-pg-proxy:
+    <<: *kong_defaults
+    environment:
+      <<: *kong_envs_ssl
+      KONG_PG_HOST: haproxy-pg-proxy
+      KONG_PG_PORT: 5432
+    depends_on:
+      - postgres
+      - haproxy-pg-proxy
+      - kong-migrations
+    ports:
+      - 8300:8000
+      - 8301:8001
+
+
 networks:
   kong-postgres:
     name: kong-postgres
